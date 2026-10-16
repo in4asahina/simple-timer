@@ -1,0 +1,829 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}[hidden]{display:none!important}</style>
+<title>タイマー</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@300..800&family=Zen+Maru+Gothic:wght@500;700&display=swap">
+<style>
+/* Layout: 画面中央に文字盤（残り時間リング）。標準＝文字盤＋操作、全画面＝文字盤を大きく、縮小＝横長の小さなパネル */
+:root {
+  --bg: #edf3fa;
+  --surface: #ffffff;
+  --line: #d4e0ee;
+  --ink: #1d3350;
+  --muted: #61779a;
+  --accent: #3a7bd5;
+  --accent-ink: #ffffff;
+  --track: #dae6f5;
+  --chip-on: #dde9f9;
+  --run-btn: #c4d7f0;   /* カウント中の一時停止ボタン：ゲージの下地より少し濃い青 */
+  --alarm-bg: #f7dcd8;
+  --alarm-surface: #fdf1ef;
+  --alarm-line: #eec3bc;
+  --alarm-ink: #9c3f37;
+  --alarm-ring: #e6a198;
+  --pause-bg: #fbf1cf;
+  --pause-surface: #fffaea;
+  --pause-line: #ecdca6;
+  --pause-ink: #5e4a12;
+  --pause-accent: #c7961f;
+  --pause-track: #f1e2b2;
+  --font-ui: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-num: "Nunito", "Zen Maru Gothic", ui-rounded, system-ui, sans-serif;
+  --ring-w: 5;   /* ゲージを大きくしても線の太さはほぼそのまま */
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111b28; --surface: #192636; --line: #2a3c53; --ink: #e2ebf6; --muted: #8ea2bc;
+    --accent: #6ea3ee; --accent-ink: #0e1a2a; --track: #24364d; --chip-on: #1f3552; --run-btn: #2f4868;
+    --alarm-bg: #3b2427; --alarm-surface: #4a2d30; --alarm-line: #6a3f41; --alarm-ink: #f4b9b0; --alarm-ring: #a85a55;
+    --pause-bg: #352d1b; --pause-surface: #433923; --pause-line: #5e5131; --pause-ink: #f3e2b0; --pause-accent: #d8b04f; --pause-track: #4f4430;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111b28; --surface: #192636; --line: #2a3c53; --ink: #e2ebf6; --muted: #8ea2bc;
+  --accent: #6ea3ee; --accent-ink: #0e1a2a; --track: #24364d; --chip-on: #1f3552; --run-btn: #2f4868;
+  --alarm-bg: #3b2427; --alarm-surface: #4a2d30; --alarm-line: #6a3f41; --alarm-ink: #f4b9b0; --alarm-ring: #a85a55;
+  --pause-bg: #352d1b; --pause-surface: #433923; --pause-line: #5e5131; --pause-ink: #f3e2b0; --pause-accent: #d8b04f; --pause-track: #4f4430;
+  color-scheme: dark;
+}
+
+/* 一時停止中は画面全体を黄色に */
+body[data-status="paused"] {
+  --bg: var(--pause-bg);
+  --surface: var(--pause-surface);
+  --line: var(--pause-line);
+  --ink: var(--pause-ink);
+  --muted: var(--pause-ink);
+  --accent: var(--pause-accent);
+  --accent-ink: var(--pause-surface);
+  --track: var(--pause-track);
+  --chip-on: var(--pause-track);
+  --run-btn: var(--pause-line);
+}
+
+/* 時間になったら画面全体の色を切り替える */
+body[data-status="done"] {
+  --bg: var(--alarm-bg);
+  --surface: var(--alarm-surface);
+  --line: var(--alarm-line);
+  --ink: var(--alarm-ink);
+  --muted: var(--alarm-ink);
+  --accent: var(--alarm-ink);
+  --track: var(--alarm-ring);
+  --chip-on: var(--alarm-surface);
+}
+
+html { height: 100%; box-sizing: border-box; }
+body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  transition: background-color .35s ease, color .35s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+*, *::before, *::after { box-sizing: border-box; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+.app {
+  position: relative;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* ヘッダー（終了音と表示モードの切り替え） */
+.bar {
+  position: absolute; z-index: 2;
+  display: flex; align-items: center; gap: 10px;
+  top: 14px;
+  right: max(16px, env(safe-area-inset-right, 0px));
+}
+.modes { display: inline-flex; gap: 2px; }
+.modes button {
+  border: 0; background: transparent; color: var(--muted);
+  display: grid; place-items: center;
+  width: 38px; height: 32px; padding: 0; border-radius: 999px; cursor: pointer;
+  transition: background-color .2s, color .2s;
+}
+.modes button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.modes button:hover { background: var(--chip-on); color: var(--ink); }
+.modes svg { width: 19px; height: 19px; }
+
+/* 終了音のボタン：オンは音の波付き、オフは斜線入りのスピーカー */
+.sound-btn {
+  position: relative;
+  width: 38px; height: 38px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: var(--ink); cursor: pointer;
+  transition: background-color .2s;
+}
+.sound-btn:hover { background: var(--chip-on); }
+.sound-btn:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
+.sound-btn input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.sound-btn svg { width: 22px; height: 22px; pointer-events: none; }
+.sound-btn input:checked ~ .ic-off,
+.sound-btn input:not(:checked) ~ .ic-on { display: none; }
+.sound-btn input:not(:checked) ~ .ic-off { opacity: .75; }
+
+/* 文字盤：上下を同じ高さの行で挟み、ゲージを画面の上下左右中央に置く */
+.stage {
+  flex: 1;
+  display: grid;
+  grid-template-rows: 1fr auto 1fr;
+  justify-items: center;
+  padding-block: 34.6px;   /* ボタンと画面下端の距離（上も同じにしてゲージを中央に保つ） */
+}
+.below {
+  grid-row: 3;
+  align-self: end;   /* ボタンは画面の下部に置く */
+  display: flex; flex-direction: column; align-items: center;
+  gap: 24px;
+  padding-top: 28px;
+}
+.dial {
+  grid-row: 2;
+  /* 大きさはウィンドウの高さに応じてスクリプトで計算（--dial-size） */
+  width: min(100%, max(192px, var(--dial-size, 44.4vh)));
+  max-width: 100%;
+  aspect-ratio: 1;
+  display: grid;
+  container-type: inline-size;
+}
+.ring, .readout { grid-area: 1 / 1; }
+.ring { width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; transition: opacity .35s ease; }
+/* ゲージはスタートしてから表示する（場所は確保したままなので数字は動かない） */
+.app[data-status="idle"] .ring { opacity: 0; }
+.track { fill: none; stroke: var(--track); stroke-width: var(--ring-w); transition: stroke .35s ease; }
+.progress { fill: none; stroke: var(--accent); stroke-width: var(--ring-w); stroke-linecap: round; transition: stroke .4s ease, opacity .3s ease; }
+
+.readout {
+  position: relative;
+  display: grid; place-items: center;
+  text-align: center;
+}
+.time {
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-num);
+  font-weight: 470;
+  /* --time-k：全画面で 1.2、画面の1/6程度のウィンドウで 1.3。その間はスクリプトでなめらかに変化 */
+  font-size: calc(13.33cqi * var(--time-k, 1));
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--ink);
+  padding: 0 .12em;
+  border-radius: .14em;
+  cursor: default;
+  transition: color .3s ease, background-color .2s ease;
+}
+/* 停止中・一時停止中は時間を押して入力できる */
+.app[data-status="idle"] .time,
+.app[data-status="paused"] .time { cursor: text; }
+.app[data-status="idle"] .time:hover,
+.app[data-status="paused"] .time:hover,
+.app.editing .time { background: var(--chip-on); }
+.time:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+/* 半確定（入力したがまだ確定していない）は薄めの色 */
+.time.pending { color: var(--muted); }
+/* 入力中のカーソル（幅をとらないので数字は動かない） */
+.time .caret {
+  display: inline-block;
+  width: .05em; height: .85em; margin: 0 -.025em;
+  background: var(--accent);
+  animation: caret 1s steps(1) infinite;
+}
+.time .d, .time .colon { cursor: text; }
+@keyframes caret { 50% { opacity: 0; } }
+
+/* 数字を受け取るための見えない入力欄（スマートフォンでは数字キーボードが出る） */
+.digit-in {
+  position: absolute; left: 50%; top: 50%;
+  width: 1px; height: 1px; padding: 0; border: 0; margin: 0;
+  opacity: 0; pointer-events: none;
+  font-size: 16px;
+}
+
+/* 時間の下の「＋」ボタン（時間の位置は動かさないよう重ねて置く） */
+.adds {
+  position: absolute; left: 0; right: 0;
+  /* 時間の数字の下端から一定の間隔をあけて置く（数字が大きくなっても重ならない） */
+  top: calc(50% + 7.33cqi * var(--time-k, 1) + 4.75cqi);
+  display: flex; justify-content: center; gap: 2cqi;
+}
+.add {
+  font-family: var(--font-num); font-weight: 600; font-variant-numeric: tabular-nums;
+  font-size: max(12px, 3.4cqi);
+  padding: .3em .8em;
+  border: 0; border-radius: 999px;
+  background: var(--chip-on); color: var(--accent);
+  cursor: pointer;
+  transition: background-color .2s, color .35s, filter .2s;
+}
+.add:hover { filter: brightness(.95); }
+.add:active { transform: scale(.96); }
+/* カウント中・時間切れは隠す。一時停止中は +0:30 と +1:00 だけ表示 */
+.app[data-status="running"] .adds,
+.app[data-status="done"] .adds { visibility: hidden; }
+.app[data-status="paused"] .add[data-add="300"] { display: none; }
+
+/* 操作ボタン */
+/* スタートボタンを中央に固定し、リセットはその右側に出す（出てもスタートボタンは動かない） */
+.controls {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  gap: 18px;
+}
+#playBtn { grid-column: 2; }
+#resetBtn { grid-column: 3; justify-self: start; width: 40px; height: 40px; }
+#resetBtn svg { width: 20px; height: 20px; }
+.ctl {
+  width: 58px; height: 58px; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  display: grid; place-items: center; cursor: pointer;
+  font-weight: 700; font-size: 14px;
+  transition: background-color .2s, transform .1s, border-color .35s, color .35s;
+}
+.ctl:hover { background: var(--chip-on); }
+.ctl:active { transform: scale(.95); }
+.ctl svg { width: 24px; height: 24px; }
+.ctl.primary { width: min(412px, calc(100vw - 160px)); height: 44px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.ctl.primary:hover { background: var(--accent); filter: brightness(1.07); }
+.app[data-status="running"] .ctl.primary,
+.app[data-status="running"] .ctl.primary:hover { background: var(--run-btn); color: var(--accent); }
+.app[data-status="running"] .ctl.primary:hover { filter: brightness(.97); }
+.ctl.primary svg { width: 24px; height: 24px; }
+
+.exit-full, .only-compact { display: none; }
+
+/* 全画面モード */
+.app[data-mode="full"] .bar { display: none; }
+.app[data-mode="full"] .stage { padding-block: 3.6vh; }
+.app[data-mode="full"] .below { padding-top: 4vh; }
+.app[data-mode="full"] .exit-full {
+  display: inline-flex; align-items: center; gap: 6px;
+  position: fixed;
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  right: calc(14px + env(safe-area-inset-right, 0px));
+  padding: 8px 14px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.exit-full svg { width: 16px; height: 16px; }
+
+/* 縮小モード */
+.app[data-mode="compact"] .bar,
+.app[data-mode="compact"] .adds { display: none; }
+.app[data-mode="compact"] .below { padding-top: 0; align-self: center; }
+.app[data-mode="compact"] .stage {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: row; flex-wrap: wrap;
+  justify-content: flex-start; align-items: center;
+  align-self: flex-start;
+  gap: 12px 18px;
+  margin-block: 12px;
+  padding: 12px 14px 12px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  max-width: 100%;
+  transition: background-color .35s, border-color .35s;
+}
+.app[data-mode="compact"] .dial {
+  width: auto; aspect-ratio: auto;
+  grid-template-columns: 72px auto; align-items: center; gap: 14px;
+  container-type: normal;
+}
+.app[data-mode="compact"] .ring { grid-area: 1 / 1; width: 72px; height: 72px; }
+.app[data-mode="compact"] .readout { grid-area: 1 / 2; display: flex; align-items: center; text-align: left; }
+.app[data-mode="compact"] .time { font-size: 40px; }
+.app[data-mode="compact"] { --ring-w: 24; }
+.app[data-mode="compact"] .ring circle { r: 88px; }   /* 太くした線がはみ出さないように半径を少し小さく */
+.app[data-mode="compact"] .controls { display: flex; gap: 8px; }
+.app[data-mode="compact"] .ctl { width: 44px; height: 44px; }
+.app[data-mode="compact"] .ctl svg { width: 20px; height: 20px; }
+.app[data-mode="compact"] .ctl.primary { width: 88px; height: 46px; }
+.app[data-mode="compact"] .ctl.primary svg { width: 24px; height: 24px; }
+.app[data-mode="compact"] .only-compact { display: grid; }
+
+@media (max-width: 420px) {
+  .controls { gap: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+</style>
+
+</head>
+<body>
+<div class="app" id="app" data-mode="standard" data-status="idle">
+  <header class="bar">
+    <label class="sound-btn" title="終了音">
+      <input type="checkbox" id="soundToggle" checked aria-label="終了音">
+      <svg class="ic-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6"/><path d="M18.3 6.5a7.8 7.8 0 0 1 0 11"/></svg>
+      <svg class="ic-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6"/><path d="M18.3 6.5a7.8 7.8 0 0 1 0 11"/><path d="M3.5 3.5l17 17"/></svg>
+    </label>
+    <div class="modes" role="group" aria-label="表示モード">
+      <button type="button" data-mode-btn="full" aria-pressed="false" aria-label="全画面" title="全画面">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg>
+      </button>
+      <button type="button" data-mode-btn="compact" aria-pressed="false" aria-label="縮小表示" title="縮小表示">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="12" width="6" height="4.5" rx="1" fill="currentColor"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <div class="dial">
+      <svg class="ring" viewBox="0 0 200 200" aria-hidden="true">
+        <circle class="track" cx="100" cy="100" r="90"/>
+        <circle class="progress" id="progress" cx="100" cy="100" r="90" pathLength="1000" stroke-dasharray="1000 1000" stroke-dashoffset="0"/>
+      </svg>
+      <div class="readout">
+        <div class="time" id="timeBox" role="button" tabindex="0" aria-label="時間を入力（例：330 で3分30秒）">00:05:00</div>
+        <input id="digitIn" class="digit-in" type="text" inputmode="numeric" autocomplete="off" tabindex="-1" aria-label="時間を数字で入力">
+        <div class="adds" role="group" aria-label="時間を足す">
+          <button type="button" class="add" data-add="30" aria-label="30秒足す">+0:30</button>
+          <button type="button" class="add" data-add="60" aria-label="1分足す">+1:00</button>
+          <button type="button" class="add" data-add="300" aria-label="5分足す">+5:00</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="below">
+      <div class="controls">
+        <button type="button" class="ctl primary" id="playBtn" aria-label="スタート" title="スタート／一時停止（Space）">
+          <svg id="icPlay" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8.5 5.6v12.8c0 .8.9 1.3 1.6.9l10-6.4c.6-.4.6-1.4 0-1.8l-10-6.4c-.7-.4-1.6.1-1.6.9z"/></svg>
+          <svg id="icPause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" hidden><rect x="6.5" y="5" width="4" height="14" rx="1.3"/><rect x="13.5" y="5" width="4" height="14" rx="1.3"/></svg>
+          <svg id="icStop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" hidden><rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/></svg>
+        </button>
+        <button type="button" class="ctl" id="resetBtn" aria-label="リセット" title="リセット（R）" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v4h4"/></svg>
+        </button>
+        <button type="button" class="ctl only-compact" id="expandBtn" aria-label="標準表示に戻す" title="標準表示に戻す">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M10 20H4v-6"/><path d="M20 4l-6.5 6.5"/><path d="M4 20l6.5-6.5"/></svg>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <button type="button" class="exit-full" id="exitFull">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4"/><path d="M15 20v-5h5"/><path d="M20 9h-5V4"/><path d="M4 15h5v5"/></svg>
+    全画面を終了
+  </button>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const app = $('app'), prog = $('progress');
+  const timeBox = $('timeBox'), digitIn = $('digitIn');
+  const playBtn = $('playBtn'), resetBtn = $('resetBtn');
+  const soundToggle = $('soundToggle');
+  const icPlay = $('icPlay'), icPause = $('icPause'), icStop = $('icStop');
+  const MAX = (99 * 3600 + 59 * 60 + 59) * 1000;   // 99:59:59 まで
+
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('jugyoTimer.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem('jugyoTimer.' + k, JSON.stringify(v)); } catch (e) {} }
+  };
+
+  // 状態
+  // duration: 設定した長さ / base: 計測開始時点の残り時間 / t0p,t0d: 計測開始時刻（2種類の時計）
+  // editing: 数字を入力中か / buf: 入力中（半確定）の数字
+  const S = { status: 'idle', duration: 300000, base: 300000, t0p: 0, t0d: 0, mode: 'standard', editing: false, buf: '' };
+  const saved = Number(store.get('duration', 300000));
+  if (saved >= 1000 && saved <= MAX) { S.duration = saved; S.base = saved; }
+  let sound = store.get('sound', true) !== false;
+  soundToggle.checked = sound;
+
+  // ---- 正確な経過時間 ----
+  // performance.now() は時計合わせの影響を受けない単調増加の時計。
+  // ただしPCがスリープすると止まることがあるため、Date.now() と1.5秒以上ずれたら Date.now() を採用する。
+  function elapsed() {
+    const p = performance.now() - S.t0p;
+    const d = Date.now() - S.t0d;
+    return (d - p > 1500) ? d : p;
+  }
+  function remaining() {
+    return (S.status === 'running' || S.status === 'done') ? S.base - elapsed() : S.base;
+  }
+
+  const pad = (n) => String(n).padStart(2, '0');
+  const secsLeft = (ms) => Math.max(0, Math.ceil(ms / 1000 - 1e-6));
+
+  // 表示の形式
+  //  入力中 … 00:05:00
+  //  それ以外 … 1:05:00 / 5:00 / 1分未満は 59, 58, … 9
+  function fmt(t, full) {
+    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+    if (full) return pad(h) + ':' + pad(m) + ':' + pad(s);
+    if (h > 0) return h + ':' + pad(m) + ':' + pad(s);
+    if (m > 0) return m + ':' + pad(s);
+    return String(s);
+  }
+  // 入力した数字を右から詰めて 時:分:秒 にする（330 → 00:03:30）
+  function bufText(b) {
+    const p = b.padStart(6, '0');
+    return p.slice(0, 2) + ':' + p.slice(2, 4) + ':' + p.slice(4, 6);
+  }
+  function bufSeconds(b) {
+    const p = b.padStart(6, '0');
+    return (+p.slice(0, 2)) * 3600 + (+p.slice(2, 4)) * 60 + (+p.slice(4, 6));   // 90秒のような入力も繰り上げて扱う
+  }
+
+  // ---- 状態の切り替え ----
+  function setStatus(st) {
+    S.status = st;
+    app.dataset.status = st;
+    document.body.dataset.status = st;
+    const editable = st === 'idle' || st === 'paused';
+    timeBox.tabIndex = editable ? 0 : -1;
+    timeBox.setAttribute('aria-disabled', String(!editable));
+    updateButtons();
+  }
+
+  function updateButtons() {
+    const st = S.status;
+    // SVG要素は .hidden プロパティが効かないため、属性で切り替える
+    icPlay.toggleAttribute('hidden', st === 'running' || st === 'done');
+    icPause.toggleAttribute('hidden', st !== 'running');
+    icStop.toggleAttribute('hidden', st !== 'done');
+    playBtn.setAttribute('aria-label', st === 'running' ? '一時停止' : st === 'done' ? '停止' : 'スタート');
+    // リセットはスタートした後（カウント中・一時停止中・時間切れ）に表示
+    resetBtn.hidden = st === 'idle';
+  }
+
+  function start() {
+    if (S.editing) commitEdit();          // 半確定の数字はスタートで確定
+    if (S.base <= 0) return;
+    S.t0p = performance.now();
+    S.t0d = Date.now();
+    audioInit();
+    setStatus('running');
+    lock();
+  }
+  function pause() {
+    S.base = remaining();
+    setStatus('paused');
+    unlock();
+  }
+  function reset() {
+    if (S.editing) cancelEdit();
+    S.base = S.duration;
+    setStatus('idle');
+    unlock();
+  }
+  function toggle() {
+    if (S.status === 'running') pause();
+    else if (S.status === 'done') reset();
+    else start();
+  }
+  function setDuration(ms) {
+    ms = Math.min(MAX, Math.max(1000, ms));
+    S.duration = ms;
+    S.base = ms;
+    store.set('duration', ms);
+    setStatus('idle');
+  }
+
+  // ＋0:30 / ＋1:00 / ＋5:00
+  function addTime(sec) {
+    if (S.editing) commitEdit();
+    if (S.status === 'done') return;
+    const ms = sec * 1000;
+    if (S.status === 'idle') { setDuration(Math.min(MAX, S.duration + ms)); return; }
+    // カウント中・一時停止中は残り時間に足す
+    const add = Math.min(ms, MAX - remaining());
+    if (add <= 0) return;
+    S.base += add;
+    S.duration += add;
+  }
+
+  // ---- 数字の直接入力 ----
+  // D     : 入力中の6桁（時2桁・分2桁・秒2桁。例 "000510" = 00:05:10）
+  // caret : カーソル位置。表示「00:05:10」（8文字）の何文字目の前か（0〜8）。「:」の左右どちらにも置ける
+  // fresh : 入力を始めた直後でカーソルを動かしていない状態。最初の数字で全体を打ち直す
+  // dirty : 1度でも変更したか（変更したら薄い色＝半確定で表示）
+  //  ・数字はカーソルの左に挿入（末尾なら右から詰める入力：330 → 00:03:30）
+  //  ・BackSpace … 末尾なら右端を消して右へ詰める。途中なら左の桁を0にして左へ。Delete は右の桁を0にする
+  //  ・「:」は消えない。BackSpace／Delete で「:」に当たったら、カーソルだけをその向きに1つ進める
+  const END = 8;
+  const isColon = (p) => p === 2 || p === 5;
+  const digitIndex = (p) => (p < 2 ? p : p < 5 ? p - 1 : p - 2);   // 表示位置 → 6桁の何桁目か
+  function full6(t) {
+    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+    return pad(h) + pad(m) + pad(s);
+  }
+  const setAt = (str, i, ch) => str.slice(0, i) + ch + str.slice(i + 1);
+  function beginEdit(first) {
+    if (S.status === 'running' || S.status === 'done') return;
+    S.editing = true;
+    S.D = full6(secsLeft(S.base));
+    S.orig = S.D;
+    S.caret = END;
+    S.fresh = true;
+    digitIn.value = '';
+    app.classList.add('editing');
+    digitIn.focus({ preventScroll: true });
+    if (first) insertDigit(first);
+  }
+  function changed() { S.dirty = S.D !== S.orig; }
+  // カーソルより左にある桁の数（表示位置 → 桁数）
+  const digitsBefore = (p) => (p <= 2 ? p : p <= 5 ? p - 1 : p - 2);
+  // 数字はカーソルの左側に挿入する。左の数字は1桁ずつ左へずれ、いちばん左の桁が押し出される。
+  // カーソルの位置は変わらない（末尾なら 3→3、33→33、330→3:30 と右から詰める入力になる）
+  function insertDigit(d) {
+    if (S.caret >= END && S.fresh) S.D = '000000';
+    const k = digitsBefore(S.caret);
+    if (k === 0) { S.D = d + S.D.slice(1); S.caret = 1; }   // 先頭では左に詰める余地がないので先頭の桁に入れる
+    else S.D = S.D.slice(1, k) + d + S.D.slice(k);
+    S.fresh = false;
+    changed();
+  }
+  function deleteBack() {
+    S.fresh = false;
+    if (S.caret >= END) { S.D = '0' + S.D.slice(0, 5); changed(); return; }   // 右端を消して右へ詰める
+    if (S.caret === 0) return;
+    const p = S.caret - 1;
+    if (!isColon(p)) S.D = setAt(S.D, digitIndex(p), '0');   // 「:」なら消さずにカーソルだけ左へ
+    S.caret = p;
+    changed();
+  }
+  function deleteForward() {
+    S.fresh = false;
+    if (S.caret >= END) return;
+    if (isColon(S.caret)) { S.caret++; return; }             // 「:」なら消さずにカーソルだけ右へ
+    S.D = setAt(S.D, digitIndex(S.caret), '0');
+    changed();
+  }
+  function moveCaret(to) {
+    S.fresh = false;
+    S.caret = Math.max(0, Math.min(END, to));
+  }
+  function endEditUI() {
+    S.editing = false;
+    S.fresh = false;
+    S.dirty = false;
+    digitIn.value = '';
+    app.classList.remove('editing');
+    if (document.activeElement === digitIn) digitIn.blur();
+  }
+  // 確定：フォーカスが外れたとき、Enter、スタートボタン、＋ボタン
+  function commitEdit() {
+    if (!S.editing) return;
+    const D = S.D, wasChanged = S.dirty;
+    endEditUI();
+    if (!wasChanged) return;              // 変更がなければ元の時間のまま
+    const sec = (+D.slice(0, 2)) * 3600 + (+D.slice(2, 4)) * 60 + (+D.slice(4, 6));   // 90秒なども繰り上げて扱う
+    if (sec <= 0) return;                 // 0秒は受け付けない
+    setDuration(sec * 1000);
+  }
+  // 取り消し：Esc、リセット
+  function cancelEdit() {
+    if (!S.editing) return;
+    endEditUI();
+  }
+
+  // 入力中に時間を押しても確定されないようにフォーカスを保ち、押した位置にカーソルを移す
+  timeBox.addEventListener('mousedown', (e) => { if (S.editing) e.preventDefault(); });
+  timeBox.addEventListener('click', (e) => {
+    if (!S.editing) { beginEdit(''); return; }
+    const d = e.target.closest('[data-pos]');
+    if (d) {
+      // 押した文字の左半分ならその左、右半分ならその右にカーソルを置く（「:」も同じ）
+      const r = d.getBoundingClientRect();
+      moveCaret(Number(d.dataset.pos) + (e.clientX > r.left + r.width / 2 ? 1 : 0));
+    } else {
+      moveCaret(END);
+    }
+    digitIn.focus({ preventScroll: true });
+  });
+  timeBox.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); beginEdit(''); }
+  });
+  digitIn.addEventListener('keydown', (e) => {
+    const k = e.key;
+    if (/^[0-9]$/.test(k)) { e.preventDefault(); insertDigit(k); }
+    else if (k === 'Backspace') { e.preventDefault(); deleteBack(); }
+    else if (k === 'Delete') { e.preventDefault(); deleteForward(); }
+    else if (k === 'ArrowLeft') { e.preventDefault(); moveCaret(S.caret - 1); }
+    else if (k === 'ArrowRight') { e.preventDefault(); moveCaret(S.caret + 1); }
+    else if (k === 'Home' || k === 'ArrowUp') { e.preventDefault(); moveCaret(0); }
+    else if (k === 'End' || k === 'ArrowDown') { e.preventDefault(); moveCaret(END); }
+    else if (k === 'Enter') { e.preventDefault(); commitEdit(); }
+    else if (k === 'Escape') { e.preventDefault(); cancelEdit(); }
+    else if (k === ' ') { e.preventDefault(); start(); }
+  });
+  // スマートフォンの画面キーボードなど、上で受け取れなかった入力の受け皿
+  digitIn.addEventListener('input', () => {
+    const v = digitIn.value.replace(/\D/g, '');
+    digitIn.value = '';
+    for (const ch of v) insertDigit(ch);
+  });
+  digitIn.addEventListener('blur', () => { if (S.editing) commitEdit(); });
+
+  // ---- 描画 ----
+  let lastShown = '', lastTitle = '';
+  function drawRing(f) {
+    if (f <= 0.0005) { prog.style.visibility = 'hidden'; return; }
+    prog.style.visibility = 'visible';
+    const a = Math.min(1, f) * 1000;
+    prog.setAttribute('stroke-dasharray', a.toFixed(2) + ' 1000');
+    // 減った部分が12時の位置から時計回りに広がるように、弧の始点をずらす
+    prog.setAttribute('stroke-dashoffset', (-(1000 - a)).toFixed(2));
+  }
+
+  function frame() {
+    let rem = remaining();
+    if (S.status === 'running' && rem <= 0) {
+      setStatus('done');
+      unlock();
+      chime(false);
+      rem = remaining();
+    }
+
+    const t = S.status === 'done' ? 0 : secsLeft(rem);
+    const f = S.status === 'done' ? 0 : (S.duration > 0 ? Math.max(0, rem) / S.duration : 0);
+    drawRing(f);
+
+    if (S.editing) {
+      // 入力中：00:00:00 表記。1文字ずつ並べてカーソルを描く（「:」の左右どちらにも置ける）
+      let html = '';
+      for (let p = 0; p < END; p++) {
+        if (S.caret === p) html += '<span class="caret"></span>';
+        if (isColon(p)) html += '<span class="colon" data-pos="' + p + '">:</span>';
+        else html += '<span class="d" data-pos="' + p + '">' + S.D[digitIndex(p)] + '</span>';
+      }
+      if (S.caret === END) html += '<span class="caret"></span>';
+      const key = 'E' + html + (S.dirty ? '*' : '');
+      if (key !== lastShown) {
+        timeBox.innerHTML = html;
+        timeBox.classList.toggle('pending', S.dirty);
+        lastShown = key;
+      }
+    } else {
+      const text = fmt(t, false);   // 確定している時間は先頭の0を省く
+      if (text !== lastShown) {
+        timeBox.textContent = text;
+        timeBox.classList.remove('pending');
+        lastShown = text;
+      }
+    }
+
+    let title;
+    if (S.status === 'done') title = '時間です｜タイマー';
+    else if (S.status === 'running') title = fmt(t, false) + '｜タイマー';
+    else if (S.status === 'paused') title = '一時停止｜タイマー';
+    else title = 'タイマー';
+    if (title !== lastTitle) { document.title = title; lastTitle = title; }
+  }
+
+  // 表示中は毎フレーム描画。タブが裏にあるときも0.25秒ごとに時刻を確認して終了を検知する。
+  function loop() { frame(); requestAnimationFrame(loop); }
+  requestAnimationFrame(loop);
+  setInterval(() => { if (document.hidden) frame(); }, 250);
+  document.addEventListener('visibilitychange', () => {
+    frame();
+    if (!document.hidden && S.status === 'running') lock();
+  });
+
+  // ---- 画面のスリープ防止（対応ブラウザのみ） ----
+  let wakeLock = null;
+  async function lock() {
+    try {
+      if ('wakeLock' in navigator && !wakeLock && !document.hidden) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      }
+    } catch (e) { wakeLock = null; }
+  }
+  function unlock() {
+    try { if (wakeLock) wakeLock.release(); } catch (e) {}
+    wakeLock = null;
+  }
+
+  // ---- 終了音（やわらかいチャイム） ----
+  let actx = null;
+  function audioInit() {
+    try {
+      if (!actx) {
+        const C = window.AudioContext || window.webkitAudioContext;
+        if (C) actx = new C();
+      }
+      if (actx && actx.state === 'suspended') actx.resume();
+    } catch (e) { actx = null; }
+  }
+  function tone(freq, at, dur, vol) {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(at); o.stop(at + dur + 0.05);
+  }
+  function chime(preview) {
+    if ((!sound && !preview) || !actx) return;
+    try {
+      const t = actx.currentTime + 0.05;
+      const notes = [659.25, 830.61, 987.77];
+      const times = preview ? 1 : 3;
+      for (let r = 0; r < times; r++) {
+        notes.forEach((fq, i) => tone(fq, t + r * 1.7 + i * 0.22, 1.3, preview ? 0.12 : 0.2));
+      }
+    } catch (e) {}
+  }
+  soundToggle.addEventListener('change', () => {
+    sound = soundToggle.checked;
+    store.set('sound', sound);
+    if (sound) { audioInit(); chime(true); }
+  });
+
+  // ---- 表示モード ----
+  const modeBtns = document.querySelectorAll('[data-mode-btn]');
+  function setMode(m) {
+    if (S.editing) commitEdit();
+    S.mode = m;
+    app.dataset.mode = m;
+    modeBtns.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.modeBtn === m)));
+    if (m === 'full') {
+      const el = document.documentElement;
+      if (!document.fullscreenElement && el.requestFullscreen) {
+        try { const p = el.requestFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+      }
+    } else if (document.fullscreenElement && document.exitFullscreen) {
+      try { const p = document.exitFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+    }
+  }
+  modeBtns.forEach((b) => b.addEventListener('click', () => setMode(b.dataset.modeBtn)));
+  $('exitFull').addEventListener('click', () => setMode('standard'));
+  $('expandBtn').addEventListener('click', () => setMode('standard'));
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement && S.mode === 'full') setMode('standard');
+  });
+
+  // ---- ボタン・キー操作 ----
+  playBtn.addEventListener('click', toggle);
+  resetBtn.addEventListener('click', reset);
+  document.querySelectorAll('[data-add]').forEach((b) => {
+    b.addEventListener('click', () => addTime(Number(b.dataset.add)));
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (S.editing || e.target === timeBox && e.key === 'Enter') return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); toggle(); }
+    else if (e.key === 'r' || e.key === 'R') { reset(); }
+    else if (e.key === 'f' || e.key === 'F') { setMode(S.mode === 'full' ? 'standard' : 'full'); }
+    else if (/^[0-9]$/.test(e.key) && (S.status === 'idle' || S.status === 'paused')) {
+      // 数字キーを押したら、そのまま入力を始める
+      e.preventDefault();
+      beginEdit(e.key);
+    }
+  });
+
+  // ゲージの直径をウィンドウの高さから決める。
+  //  ・画面の1/6程度のウィンドウ（高さが画面の約41%）以下 → ウィンドウの高さの57.7%
+  //  ・全画面（画面いっぱいの高さ） → 画面の高さの44.4%
+  //  ・その間は、ウィンドウが大きくなるほどなめらかに大きくなるように直線でつなぐ
+  function checkWindowSize() {
+    const H = screen.height || window.innerHeight;
+    const h = window.innerHeight;
+    const h1 = H * 0.408;
+    let size;
+    if (h <= h1) size = h * 0.577;
+    else if (h >= H) size = h * 0.444;
+    else {
+      const s1 = h1 * 0.577, s2 = H * 0.444;
+      size = s1 + (s2 - s1) * (h - h1) / (H - h1);
+    }
+    app.style.setProperty('--dial-size', size.toFixed(1) + 'px');
+    // 時間の数字：1/6程度のとき1.3、全画面で1.2。その間はなめらかに変える
+    let k;
+    if (h <= h1) k = 1.3;
+    else if (h >= H) k = 1.2;
+    else k = 1.3 - 0.1 * (h - h1) / (H - h1);
+    app.style.setProperty('--time-k', k.toFixed(3));
+  }
+  window.addEventListener('resize', checkWindowSize);
+  checkWindowSize();
+
+  setStatus('idle');
+  frame();
+})();
+</script>
+
+</body>
+</html>
