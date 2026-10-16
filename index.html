@@ -329,7 +329,7 @@ button { font: inherit; color: inherit; }
 <div class="app" id="app" data-mode="standard" data-status="idle">
   <header class="bar">
     <label class="sound-btn" title="終了音">
-      <input type="checkbox" id="soundToggle" checked aria-label="終了音">
+      <input type="checkbox" id="soundToggle" aria-label="終了音">
       <svg class="ic-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6"/><path d="M18.3 6.5a7.8 7.8 0 0 1 0 11"/></svg>
       <svg class="ic-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6"/><path d="M18.3 6.5a7.8 7.8 0 0 1 0 11"/><path d="M3.5 3.5l17 17"/></svg>
     </label>
@@ -404,7 +404,7 @@ button { font: inherit; color: inherit; }
   const S = { status: 'idle', duration: 300000, base: 300000, t0p: 0, t0d: 0, mode: 'standard', editing: false, buf: '' };
   const saved = Number(store.get('duration', 300000));
   if (saved >= 1000 && saved <= MAX) { S.duration = saved; S.base = saved; }
-  let sound = store.get('sound', true) !== false;
+  let sound = store.get('sound', false) === true;   // 終了音は最初はオフ
   soundToggle.checked = sound;
 
   // ---- 正確な経過時間 ----
