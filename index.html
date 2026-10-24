@@ -280,6 +280,71 @@ button { font: inherit; color: inherit; }
 }
 .exit-full svg { width: 16px; height: 16px; }
 
+/* ---- バー表示（キングジム「ビジュアルバータイマー」風：20コマの横バー＋目盛り） ---- */
+.vbar { display: none; }
+#viewBtn {
+  border: 0; background: transparent; color: var(--muted);
+  display: grid; place-items: center;
+  width: 38px; height: 32px; padding: 0; border-radius: 999px; cursor: pointer;
+  transition: background-color .2s, color .2s;
+}
+#viewBtn:hover { background: var(--chip-on); color: var(--ink); }
+#viewBtn svg { width: 20px; height: 20px; }
+.app[data-view="bar"] .ring { display: none; }
+.app[data-view="bar"] .dial {
+  position: relative;
+  width: min(100%, 1100px, 160vh);
+  aspect-ratio: auto;
+  display: flex; flex-direction: column; align-items: center;
+}
+.app[data-view="bar"] .readout { display: contents; }
+/* 数字と＋ボタンは、円グラフ表示のゲージの直径（--ring-d）を基準にして同じ大きさにする */
+.app[data-view="bar"] { --ring-d: max(192px, var(--dial-size, 44.4vh)); }
+.app[data-view="bar"] .time { order: 1; font-size: calc(var(--ring-d) * .1333 * var(--time-k, 1)); }
+.app[data-view="bar"] .adds {
+  position: static; order: 2;
+  margin-top: calc(var(--ring-d) * .0475);
+  gap: calc(var(--ring-d) * .02);
+}
+.app[data-view="bar"] .add { font-size: max(12px, calc(var(--ring-d) * .034)); }
+.app[data-view="bar"] .vbar {
+  order: 3;
+  display: flex; flex-direction: column; gap: 1cqi;
+  /* ブロックの幅と間隔を、もとの比率のまし0.8倍に */
+  width: 80%;
+  margin-top: 3cqi;
+  transition: opacity .35s ease;
+}
+/* バーもスタートしてから表示する（場所は確保したまま） */
+.app[data-view="bar"][data-status="idle"] .vbar { opacity: 0; }
+.segs {
+  display: grid; grid-template-columns: repeat(20, 1fr);
+  gap: .44cqi;
+  height: clamp(34px, 9vh, 110px);
+}
+.segs i {
+  border-radius: max(4px, .6cqi);
+  background: var(--track);
+  transition: background-color .25s ease;
+}
+.segs i.on { background: var(--accent); }
+/* 目盛り：左端が0、右端が設定時間。4等分した位置に時刻を表示 */
+.ticks {
+  position: relative; height: 2.4em;
+  font-family: var(--font-num); font-weight: 600; font-variant-numeric: tabular-nums;
+  font-size: max(12px, 1.5cqi); color: var(--muted);
+}
+.ticks span { position: absolute; top: 0; padding-top: .55em; transform: translateX(-50%); white-space: nowrap; }
+.ticks span::before {
+  content: ""; position: absolute; top: 0; left: 50%;
+  width: 2px; height: .4em; margin-left: -1px; border-radius: 1px;
+  background: var(--line);
+}
+.ticks span:first-child { transform: none; }
+.ticks span:first-child::before { left: 1px; }
+.ticks span:last-child { transform: translateX(-100%); }
+.ticks span:last-child::before { left: auto; right: 0; }
+
 /* 縮小モード */
 .app[data-mode="compact"] .bar,
 .app[data-mode="compact"] .adds { display: none; }
@@ -315,6 +380,17 @@ button { font: inherit; color: inherit; }
 .app[data-mode="compact"] .ctl.primary { width: 88px; height: 46px; }
 .app[data-mode="compact"] .ctl.primary svg { width: 24px; height: 24px; }
 .app[data-mode="compact"] .only-compact { display: grid; }
+/* 縮小モード＋バー表示：小さなバーの右に時間 */
+.app[data-mode="compact"][data-view="bar"] .dial {
+  display: flex; flex-direction: row; align-items: center; gap: 14px;
+  width: auto; container-type: normal;
+}
+.app[data-mode="compact"][data-view="bar"] .readout { display: contents; }
+.app[data-mode="compact"][data-view="bar"] .vbar { order: 1; width: 120px; margin: 0; }
+.app[data-mode="compact"][data-view="bar"] .segs { height: 26px; gap: 2.4px; }
+.app[data-mode="compact"][data-view="bar"] .segs i { border-radius: 3px; }
+.app[data-mode="compact"][data-view="bar"] .ticks { display: none; }
+.app[data-mode="compact"][data-view="bar"] .time { order: 2; font-size: 40px; }
 
 @media (max-width: 420px) {
   .controls { gap: 16px; }
@@ -326,8 +402,12 @@ button { font: inherit; color: inherit; }
 
 </head>
 <body>
-<div class="app" id="app" data-mode="standard" data-status="idle">
+<div class="app" id="app" data-mode="standard" data-status="idle" data-view="ring">
   <header class="bar">
+    <button type="button" id="viewBtn" aria-label="バー表示に切り替え" title="バー表示に切り替え">
+      <svg id="icBar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="8" width="4" height="8" rx="1" fill="currentColor"/><rect x="7.5" y="8" width="4" height="8" rx="1" fill="currentColor"/><rect x="12.5" y="8" width="4" height="8" rx="1" fill="currentColor"/><rect x="17.5" y="8" width="4" height="8" rx="1"/></svg>
+      <svg id="icRing" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true" hidden><circle cx="12" cy="12" r="8" opacity=".35"/><path d="M12 4a8 8 0 1 1-8 8"/></svg>
+    </button>
     <label class="sound-btn" title="終了音">
       <input type="checkbox" id="soundToggle" aria-label="終了音">
       <svg class="ic-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6"/><path d="M18.3 6.5a7.8 7.8 0 0 1 0 11"/></svg>
@@ -357,6 +437,10 @@ button { font: inherit; color: inherit; }
           <button type="button" class="add" data-add="60" aria-label="1分足す">+1:00</button>
           <button type="button" class="add" data-add="300" aria-label="5分足す">+5:00</button>
         </div>
+      </div>
+      <div class="vbar" aria-hidden="true">
+        <div class="segs" id="segs"></div>
+        <div class="ticks" id="ticks"><span></span><span></span><span></span><span></span><span></span></div>
       </div>
     </div>
 
@@ -633,6 +717,40 @@ button { font: inherit; color: inherit; }
   });
   digitIn.addEventListener('blur', () => { if (S.editing) commitEdit(); });
 
+  // ---- バー表示 ----
+  const SEG_N = 20;
+  const segsEl = $('segs'), tickEls = $('ticks').children;
+  const segEls = [];
+  for (let i = 0; i < SEG_N; i++) { const el = document.createElement('i'); segsEl.appendChild(el); segEls.push(el); }
+  let lastLit = -1, lastTickDur = -1;
+  function drawBar(f) {
+    // 1コマ＝設定時間の1/20。コマの時間が少しでも残っている間は点灯し、右端から順に消えていく
+    const lit = f <= 0 ? 0 : Math.min(SEG_N, Math.ceil(f * SEG_N - 1e-9));
+    if (lit !== lastLit) {
+      segEls.forEach((el, i) => el.classList.toggle('on', i < lit));
+      lastLit = lit;
+    }
+    if (S.duration !== lastTickDur) {   // 目盛りの時刻（0、1/4、1/2、3/4、設定時間）
+      const total = Math.round(S.duration / 1000);
+      for (let i = 0; i < 5; i++) {
+        tickEls[i].textContent = fmt(Math.round(total * i / 4), false);
+        tickEls[i].style.left = (i * 25) + '%';
+      }
+      lastTickDur = S.duration;
+    }
+  }
+  const viewBtn = $('viewBtn'), icBar = $('icBar'), icRing = $('icRing');
+  viewBtn.addEventListener('click', () => {
+    const v = app.dataset.view === 'bar' ? 'ring' : 'bar';
+    app.dataset.view = v;
+    // アイコンは「押すと切り替わる先」の表示を示す
+    icBar.toggleAttribute('hidden', v === 'bar');
+    icRing.toggleAttribute('hidden', v !== 'bar');
+    const label = v === 'bar' ? '円グラフ表示に切り替え' : 'バー表示に切り替え';
+    viewBtn.setAttribute('aria-label', label);
+    viewBtn.title = label;
+  });
+
   // ---- 描画 ----
   let lastShown = '', lastTitle = '';
   function drawRing(f) {
@@ -656,6 +774,7 @@ button { font: inherit; color: inherit; }
     const t = S.status === 'done' ? 0 : secsLeft(rem);
     const f = S.status === 'done' ? 0 : (S.duration > 0 ? Math.max(0, rem) / S.duration : 0);
     drawRing(f);
+    drawBar(f);
 
     if (S.editing) {
       // 入力中：00:00:00 表記。1文字ずつ並べてカーソルを描く（「:」の左右どちらにも置ける）
