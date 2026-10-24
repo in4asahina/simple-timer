@@ -310,8 +310,8 @@ button { font: inherit; color: inherit; }
 .app[data-view="bar"] .vbar {
   order: 3;
   display: flex; flex-direction: column; gap: 1cqi;
-  /* ブロックの幅と間隔を、もとの比率のまし0.8倍に */
-  width: 80%;
+  /* ブロックの幅と間隔を、もとの比率のまし0.52倍に（0.8倍×0.5倍×1.3倍） */
+  width: 52%;
   margin-top: 3cqi;
   transition: opacity .35s ease;
 }
@@ -319,11 +319,11 @@ button { font: inherit; color: inherit; }
 .app[data-view="bar"][data-status="idle"] .vbar { opacity: 0; }
 .segs {
   display: grid; grid-template-columns: repeat(20, 1fr);
-  gap: .44cqi;
+  gap: .286cqi;
   height: clamp(34px, 9vh, 110px);
 }
 .segs i {
-  border-radius: max(4px, .6cqi);
+  border-radius: max(3px, .39cqi);
   background: var(--track);
   transition: background-color .25s ease;
 }
