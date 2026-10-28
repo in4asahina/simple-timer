@@ -345,6 +345,49 @@ button { font: inherit; color: inherit; }
 .ticks span:last-child { transform: translateX(-100%); }
 .ticks span:last-child::before { left: auto; right: 0; }
 
+/* ---- タイマー／ストップウォッチの切り替え（左上のトグル） ---- */
+.tool-toggle {
+  position: absolute; z-index: 2;
+  top: 14px; left: max(16px, env(safe-area-inset-left, 0px));
+  width: 80px; height: 38px; padding: 0;
+  border: 0; border-radius: 999px;
+  background: var(--track);
+  display: grid; grid-template-columns: 1fr 1fr; align-items: center; justify-items: center;
+  cursor: pointer;
+  transition: background-color .35s;
+}
+.tool-toggle .knob {
+  position: absolute; top: 3px; left: 3px;
+  width: 37px; height: 32px; border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(20, 40, 70, .18);
+  transition: transform .25s ease, background-color .35s;
+}
+.app[data-tool="sw"] .tool-toggle .knob { transform: translateX(37px); }
+.tool-toggle svg { position: relative; width: 20px; height: 20px; color: var(--muted); transition: color .25s; }
+.app[data-tool="timer"] .tt-timer,
+.app[data-tool="sw"] .tt-sw { color: var(--accent); }
+.app[data-mode="full"] .tool-toggle,
+.app[data-mode="compact"] .tool-toggle { display: none; }
+
+/* ---- ストップウォッチ ---- */
+/* 入力・＋ボタン・終了音はタイマー専用 */
+.app[data-tool="sw"] .adds,
+.app[data-tool="sw"] .sound-btn { display: none; }
+.app[data-tool="sw"] .time,
+.app[data-tool="sw"] .time:hover { cursor: default; background: transparent; }
+/* 1/100秒は小さく表示 */
+.time .frac { font-size: .5em; margin-left: .05em; opacity: .7; align-self: flex-end; padding-bottom: .22em; }
+/* 円グラフ：1分で1周する弧と、その先端の点。点は1秒ごとに「トクン」と脈打つ */
+.sw-dot { display: none; fill: var(--accent); transform-box: fill-box; transform-origin: center; transition: fill .35s; }
+.app[data-tool="sw"] .sw-dot { display: inline; }
+.sw-dot.beat { animation: dotbeat .8s ease-out; }
+@keyframes dotbeat { 0% { transform: scale(2); } 100% { transform: scale(1); } }
+/* バー：1コマ＝3秒。いま刻んでいるコマは薄く点灯し、1秒ごとに明るく光る */
+.segs i.cur { background: var(--accent); opacity: .4; }
+.segs i.cur.beat { animation: segbeat .8s ease-out; }
+@keyframes segbeat { 0% { opacity: 1; } 100% { opacity: .4; } }
+
 /* 縮小モード */
 .app[data-mode="compact"] .bar,
 .app[data-mode="compact"] .adds { display: none; }
@@ -373,7 +416,8 @@ button { font: inherit; color: inherit; }
 .app[data-mode="compact"] .readout { grid-area: 1 / 2; display: flex; align-items: center; text-align: left; }
 .app[data-mode="compact"] .time { font-size: 40px; }
 .app[data-mode="compact"] { --ring-w: 24; }
-.app[data-mode="compact"] .ring circle { r: 88px; }   /* 太くした線がはみ出さないように半径を少し小さく */
+.app[data-mode="compact"] .ring .track,
+.app[data-mode="compact"] .ring .progress { r: 88px; }   /* 太くした線がはみ出さないように半径を少し小さく */
 .app[data-mode="compact"] .controls { display: flex; gap: 8px; }
 .app[data-mode="compact"] .ctl { width: 44px; height: 44px; }
 .app[data-mode="compact"] .ctl svg { width: 20px; height: 20px; }
@@ -402,7 +446,12 @@ button { font: inherit; color: inherit; }
 
 </head>
 <body>
-<div class="app" id="app" data-mode="standard" data-status="idle" data-view="ring">
+<div class="app" id="app" data-mode="standard" data-status="idle" data-view="ring" data-tool="timer">
+  <button type="button" class="tool-toggle" id="toolToggle" role="switch" aria-checked="false" aria-label="ストップウォッチに切り替え" title="タイマー／ストップウォッチ">
+    <span class="knob" aria-hidden="true"></span>
+    <svg class="tt-timer" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12M6 21h12"/><path d="M7.5 3c0 4.2 4.5 5.6 4.5 9s-4.5 4.8-4.5 9M16.5 3c0 4.2-4.5 5.6-4.5 9s4.5 4.8 4.5 9"/><path d="M9.6 19.6h4.8L12 16.8z" fill="currentColor" stroke="none"/></svg>
+    <svg class="tt-sw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M10 2.5h4M12 2.5V6M12 13.5l3-3M18.2 6.8l1.5-1.5"/></svg>
+  </button>
   <header class="bar">
     <button type="button" id="viewBtn" aria-label="バー表示に切り替え" title="バー表示に切り替え">
       <svg id="icBar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="8" width="4" height="8" rx="1" fill="currentColor"/><rect x="7.5" y="8" width="4" height="8" rx="1" fill="currentColor"/><rect x="12.5" y="8" width="4" height="8" rx="1" fill="currentColor"/><rect x="17.5" y="8" width="4" height="8" rx="1"/></svg>
@@ -428,6 +477,7 @@ button { font: inherit; color: inherit; }
       <svg class="ring" viewBox="0 0 200 200" aria-hidden="true">
         <circle class="track" cx="100" cy="100" r="90"/>
         <circle class="progress" id="progress" cx="100" cy="100" r="90" pathLength="1000" stroke-dasharray="1000 1000" stroke-dashoffset="0"/>
+        <circle class="sw-dot" id="swDot" cx="190" cy="100" r="5"/>
       </svg>
       <div class="readout">
         <div class="time" id="timeBox" role="button" tabindex="0" aria-label="時間を入力（例：330 で3分30秒）">00:05:00</div>
@@ -494,10 +544,20 @@ button { font: inherit; color: inherit; }
   // ---- 正確な経過時間 ----
   // performance.now() は時計合わせの影響を受けない単調増加の時計。
   // ただしPCがスリープすると止まることがあるため、Date.now() と1.5秒以上ずれたら Date.now() を採用する。
-  function elapsed() {
-    const p = performance.now() - S.t0p;
-    const d = Date.now() - S.t0d;
+  function since(t0p, t0d) {
+    const p = performance.now() - t0p;
+    const d = Date.now() - t0d;
     return (d - p > 1500) ? d : p;
+  }
+  function elapsed() { return since(S.t0p, S.t0d); }
+
+  // ---- ストップウォッチの状態（タイマーとは別に動く） ----
+  // acc: 一時停止までに積み上がった時間 / t0p,t0d: 計測を再開した時刻
+  let tool = 'timer';
+  const SW = { status: 'idle', acc: 0, t0p: 0, t0d: 0 };
+  const SW_MAX = 100 * 3600 * 1000 - 10;   // 99:59:59.99 まで
+  function swElapsed() {
+    return SW.status === 'running' ? SW.acc + since(SW.t0p, SW.t0d) : SW.acc;
   }
   function remaining() {
     return (S.status === 'running' || S.status === 'done') ? S.base - elapsed() : S.base;
@@ -527,18 +587,24 @@ button { font: inherit; color: inherit; }
   }
 
   // ---- 状態の切り替え ----
-  function setStatus(st) {
-    S.status = st;
+  // 画面の色やボタンは、いま表示している道具（タイマー／ストップウォッチ）の状態に合わせる
+  const curStatus = () => (tool === 'timer' ? S.status : SW.status);
+  function applyStatus() {
+    const st = curStatus();
     app.dataset.status = st;
     document.body.dataset.status = st;
-    const editable = st === 'idle' || st === 'paused';
+    const editable = tool === 'timer' && (st === 'idle' || st === 'paused');
     timeBox.tabIndex = editable ? 0 : -1;
     timeBox.setAttribute('aria-disabled', String(!editable));
     updateButtons();
   }
+  function setStatus(st) {
+    S.status = st;
+    applyStatus();
+  }
 
   function updateButtons() {
-    const st = S.status;
+    const st = curStatus();
     // SVG要素は .hidden プロパティが効かないため、属性で切り替える
     icPlay.toggleAttribute('hidden', st === 'running' || st === 'done');
     icPause.toggleAttribute('hidden', st !== 'running');
@@ -611,6 +677,7 @@ button { font: inherit; color: inherit; }
   }
   const setAt = (str, i, ch) => str.slice(0, i) + ch + str.slice(i + 1);
   function beginEdit(first) {
+    if (tool !== 'timer') return;
     if (S.status === 'running' || S.status === 'done') return;
     S.editing = true;
     S.D = full6(secsLeft(S.base));
@@ -682,6 +749,7 @@ button { font: inherit; color: inherit; }
   // 入力中に時間を押しても確定されないようにフォーカスを保ち、押した位置にカーソルを移す
   timeBox.addEventListener('mousedown', (e) => { if (S.editing) e.preventDefault(); });
   timeBox.addEventListener('click', (e) => {
+    if (tool !== 'timer') return;
     if (!S.editing) { beginEdit(''); return; }
     const d = e.target.closest('[data-pos]');
     if (d) {
@@ -751,6 +819,111 @@ button { font: inherit; color: inherit; }
     viewBtn.title = label;
   });
 
+  // ---- ストップウォッチの操作と描画 ----
+  function swStart() {
+    SW.t0p = performance.now();
+    SW.t0d = Date.now();
+    SW.status = 'running';
+    applyStatus();
+    lock();
+  }
+  function swPause() {
+    SW.acc = Math.min(SW_MAX, swElapsed());
+    SW.status = 'paused';
+    applyStatus();
+    unlock();
+  }
+  function swReset() {
+    SW.acc = 0;
+    SW.status = 'idle';
+    applyStatus();
+    unlock();
+  }
+  function swToggle() { if (SW.status === 'running') swPause(); else swStart(); }
+
+  // 表示：5.23 / 1:05.23 / 1:02:05.23（先頭の0は省き、1/100秒は小さく）
+  function swText(ms) {
+    const cs = Math.floor(ms / 10);
+    return fmt(Math.floor(cs / 100), false) + '<span class="frac">.' + pad(cs % 100) + '</span>';
+  }
+  const swDot = $('swDot');
+  let lastBeat = -1, lastSwBar = '';
+  function beat(el) {   // アニメーションを最初から再生し直す
+    if (!el) return;
+    el.classList.remove('beat');
+    void el.getBoundingClientRect();
+    el.classList.add('beat');
+  }
+  function drawStopwatch() {
+    let e = swElapsed();
+    if (e >= SW_MAX) { e = SW_MAX; if (SW.status === 'running') swPause(); }
+
+    // 円グラフ：1分で1周。偶数分は弧が伸び、奇数分は弧の後ろが追いかけて消える（途切れずに回り続ける）
+    const p = (e % 60000) / 60000, odd = Math.floor(e / 60000) % 2 === 1;
+    const start = odd ? p * 1000 : 0, len = odd ? (1 - p) * 1000 : p * 1000;
+    prog.style.visibility = len < 0.5 ? 'hidden' : 'visible';
+    prog.setAttribute('stroke-dasharray', len.toFixed(2) + ' 1000');
+    prog.setAttribute('stroke-dashoffset', (-start).toFixed(2));
+    const R = S.mode === 'compact' ? 88 : 90, a = p * Math.PI * 2;
+    swDot.setAttribute('cx', (100 + R * Math.cos(a)).toFixed(2));
+    swDot.setAttribute('cy', (100 + R * Math.sin(a)).toFixed(2));
+    swDot.setAttribute('r', S.mode === 'compact' ? 14 : 5);
+
+    // バー：1コマ＝3秒。偶数分は左から点灯、奇数分は左から消灯。いま刻んでいるコマは薄く点灯
+    const n = Math.min(SEG_N - 1, Math.floor(p * SEG_N));
+    const key = (odd ? 'o' : 'e') + n;
+    if (key !== lastSwBar) {
+      segEls.forEach((el, i) => {
+        el.classList.toggle('cur', i === n);
+        el.classList.toggle('on', i !== n && (odd ? i > n : i < n));
+      });
+      lastSwBar = key;
+    }
+    if (lastTickDur !== 'sw') {
+      ['0', '15', '30', '45', '60'].forEach((t, i) => { tickEls[i].textContent = t; tickEls[i].style.left = (i * 25) + '%'; });
+      lastTickDur = 'sw';
+    }
+
+    // 1秒ごとに点とコマを脈打たせる（計測中だけ）
+    const sec = Math.floor(e / 1000);
+    if (SW.status === 'running' && sec !== lastBeat) {
+      lastBeat = sec;
+      beat(swDot);
+      beat(segEls[n]);
+    }
+
+    const html = swText(e);
+    if ('S' + html !== lastShown) {
+      timeBox.innerHTML = html;
+      timeBox.classList.remove('pending');
+      lastShown = 'S' + html;
+    }
+    let title;
+    if (SW.status === 'running') title = fmt(Math.floor(e / 1000), false) + '｜ストップウォッチ';
+    else if (SW.status === 'paused') title = '一時停止｜ストップウォッチ';
+    else title = 'ストップウォッチ';
+    if (title !== lastTitle) { document.title = title; lastTitle = title; }
+  }
+
+  // ---- タイマー／ストップウォッチの切り替え ----
+  const toolToggle = $('toolToggle');
+  function setTool(t) {
+    if (S.editing) commitEdit();
+    tool = t;
+    app.dataset.tool = t;
+    toolToggle.setAttribute('aria-checked', String(t === 'sw'));
+    toolToggle.setAttribute('aria-label', t === 'sw' ? 'タイマーに切り替え' : 'ストップウォッチに切り替え');
+    // 表示の作り直し（前の道具の描画を消す）
+    lastShown = ''; lastLit = -1; lastTickDur = -1; lastSwBar = ''; lastBeat = -1;
+    segEls.forEach((el) => el.classList.remove('cur', 'beat'));
+    applyStatus();
+    frame();
+  }
+  toolToggle.addEventListener('click', () => setTool(tool === 'timer' ? 'sw' : 'timer'));
+  // スタート／一時停止・リセットは、表示している道具に対して働く
+  function toggleActive() { if (tool === 'timer') toggle(); else swToggle(); }
+  function resetActive() { if (tool === 'timer') reset(); else swReset(); }
+
   // ---- 描画 ----
   let lastShown = '', lastTitle = '';
   function drawRing(f) {
@@ -764,12 +937,13 @@ button { font: inherit; color: inherit; }
 
   function frame() {
     let rem = remaining();
-    if (S.status === 'running' && rem <= 0) {
+    if (S.status === 'running' && rem <= 0) {   // タイマーはストップウォッチ表示中も裏で時間切れを検知する
       setStatus('done');
       unlock();
       chime(false);
       rem = remaining();
     }
+    if (tool === 'sw') { drawStopwatch(); return; }
 
     const t = S.status === 'done' ? 0 : secsLeft(rem);
     const f = S.status === 'done' ? 0 : (S.duration > 0 ? Math.max(0, rem) / S.duration : 0);
@@ -828,6 +1002,7 @@ button { font: inherit; color: inherit; }
     } catch (e) { wakeLock = null; }
   }
   function unlock() {
+    if (S.status === 'running' || SW.status === 'running') return;   // どちらかが動いている間は画面を消さない
     try { if (wakeLock) wakeLock.release(); } catch (e) {}
     wakeLock = null;
   }
@@ -894,8 +1069,8 @@ button { font: inherit; color: inherit; }
   });
 
   // ---- ボタン・キー操作 ----
-  playBtn.addEventListener('click', toggle);
-  resetBtn.addEventListener('click', reset);
+  playBtn.addEventListener('click', toggleActive);
+  resetBtn.addEventListener('click', resetActive);
   document.querySelectorAll('[data-add]').forEach((b) => {
     b.addEventListener('click', () => addTime(Number(b.dataset.add)));
   });
@@ -903,10 +1078,10 @@ button { font: inherit; color: inherit; }
   document.addEventListener('keydown', (e) => {
     if (S.editing || e.target === timeBox && e.key === 'Enter') return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); toggle(); }
-    else if (e.key === 'r' || e.key === 'R') { reset(); }
+    if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); toggleActive(); }
+    else if (e.key === 'r' || e.key === 'R') { resetActive(); }
     else if (e.key === 'f' || e.key === 'F') { setMode(S.mode === 'full' ? 'standard' : 'full'); }
-    else if (/^[0-9]$/.test(e.key) && (S.status === 'idle' || S.status === 'paused')) {
+    else if (tool === 'timer' && /^[0-9]$/.test(e.key) && (S.status === 'idle' || S.status === 'paused')) {
       // 数字キーを押したら、そのまま入力を始める
       e.preventDefault();
       beginEdit(e.key);
